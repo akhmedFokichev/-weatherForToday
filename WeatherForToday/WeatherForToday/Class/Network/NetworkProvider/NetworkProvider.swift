@@ -40,15 +40,23 @@ final class AlamofireNetworkProvider: NetworkProvider {
         self.decoder = decoder
     }
     func send<R: APIRequest>(_ request: R) async throws -> R.Response {
-        let url = baseURL + request.path
-        print("url>> \(url)")
-        let result = await session.request(
-            url,
-            method: request.method,
-            parameters: request.parameters,
-            encoding: request.encoding,
-            headers: request.headers
-        )
+        let endpoint = baseURL + request.path
+        guard let url = URL(string: endpoint) else {
+            throw AFError.invalidURL(url: endpoint)
+        }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = request.method.rawValue
+        if let headers = request.headers {
+            headers.forEach { urlRequest.setValue($0.value, forHTTPHeaderField: $0.name) }
+        }
+        let encoded = try request.encoding.encode(urlRequest, with: request.parameters)
+        if let full = encoded.url?.absoluteString {
+            print("url>> \(full)")
+        } else {
+            print("url>> \(endpoint)")
+        }
+
+        let result = await session.request(encoded)
         .validate(statusCode: 200..<300)
         .serializingDecodable(R.Response.self, decoder: decoder)
         .response

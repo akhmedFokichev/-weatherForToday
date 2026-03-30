@@ -20,7 +20,7 @@ final class MainScreenView: UIViewController {
     }()
     
     private lazy var errorView: ErrorView = ErrorView()
-    private lazy var successView: SuccessView = SuccessView()
+    private lazy var successCarousel: SuccessCarouselView = SuccessCarouselView()
     
     private var viewModel: MainScreenViewModel?
     private let bag = DisposeBag()
@@ -62,7 +62,7 @@ private extension MainScreenView {
         switch state {
         case .initialization:
             errorView.isHidden = true
-            successView.isHidden = true
+            successCarousel.isHidden = true
             
         case .loading:
             setLoadingState()
@@ -72,25 +72,24 @@ private extension MainScreenView {
             errorView.isHidden = false
             SVProgressHUD.dismiss()
             
-        case let .success(model):
-            setSuccessState(model)
+        case let .success(models):
+            setSuccessState(models)
         }
     }
     
     func setLoadingState() {
         logoImageView.isHidden = false
         errorView.isHidden = true
-        successView.isHidden = true
+        successCarousel.isHidden = true
         SVProgressHUD.show()
     }
     
-    func setSuccessState(_ model: SuccessViewModel) {
+    func setSuccessState(_ models: [SuccessViewModel]) {
         logoImageView.isHidden = true
         SVProgressHUD.dismiss()
-        successView.isHidden = false
-        successView.set(model)
-        
-        print("print weather")
+        successCarousel.isHidden = false
+        successCarousel.configure(models: models)
+        print("print weather, pages: \(models.count)")
     }
 }
 
@@ -98,7 +97,7 @@ private extension MainScreenView {
     func addSubviews() {
         view.addSubview(logoImageView)
         view.addSubview(errorView)
-        view.addSubview(successView)
+        view.addSubview(successCarousel)
     }
     
     func addConstraints() {
@@ -113,7 +112,7 @@ private extension MainScreenView {
             $0.bottom.equalToSuperview().inset(24)
         }
         
-        successView.snp.makeConstraints {
+        successCarousel.snp.makeConstraints {
             $0.edges.equalToSuperview()
         }
         

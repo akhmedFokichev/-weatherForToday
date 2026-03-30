@@ -13,7 +13,7 @@ enum MainScreenState {
     case initialization
     case loading
     case error(error: String)
-    case success(model: SuccessViewModel)
+    case success(models: [SuccessViewModel])
 }
 
 final class MainScreenViewModel {
@@ -44,8 +44,6 @@ private extension MainScreenViewModel {
     func startLocationService() async {
         do {
             let coordinate = try await locationService.requestCurrentLocation()
-            let lat = coordinate.latitude
-            let lon = coordinate.longitude
             await fetchWeather(for: coordinate)
             
         } catch LocationServiceError.denied {
@@ -58,28 +56,68 @@ private extension MainScreenViewModel {
     }
     
     func fetchWeather(for coordinate: CLLocationCoordinate2D) async {
-        let request = GetWeatherRequest(
+        let request = GetForecastRequest(
             apiKey: AppConfig.weatherapiKey,
             latitude: coordinate.latitude,
-            longitude: coordinate.longitude
+            longitude: coordinate.longitude,
+            days: 3
         )
         do {
-            let weather = try await networkProvider.send(request)
-            print(weather.current.tempC, weather.location.name)
-            
-            let model: SuccessViewModel = .init(
-                title: weather.location.name,
-                region:  "(" + weather.location.region + ")",
-                tempC: "температура воздуха: " + String(weather.current.tempC) + "°C",
-                text: weather.current.condition.text
-            )
-            state.accept(.success(model: model))
-            
+            let forecast = try await networkProvider.send(request)
+            let loc = forecast.location
+            let startOfCurrentHourEpoch = Self.startOfCurrentHourSince1970()
+            let models: [SuccessViewModel] = forecast.forecast.forecastday.enumerated().map { idx, day in
+                let d = day.day
+                let hoursForDay: [GetForecastResponse.HourEntry]
+                if idx == 0 {
+                    hoursForDay = day.hour.filter { $0.timeEpoch >= startOfCurrentHourEpoch }
+                } else {
+                    hoursForDay = day.hour
+                }
+                let hourly = hoursForDay.map { h in
+                    HourWeatherLine(
+                        time: shortHourLabel(from: h.time),
+                        detail: "\(formatTemp(h.tempC))"
+                    )
+                }
+                return SuccessViewModel(
+                    date: day.date,
+                    title: loc.name,
+                    region: "(\(loc.region), \(loc.country))",
+                    tempC: "макс \(formatTemp(d.maxtempC))° · мин \(formatTemp(d.mintempC))° · ср \(formatTemp(d.avgtempC))°",
+                    text: [
+                        d.condition.text,
+                        "ветер до \(Int(d.maxwindKph)) км/ч",
+                        "осадки \(String(format: "%.1f", d.totalprecipMM)) мм",
+                        "влажность \(Int(d.avghumidity))% · дождь \(d.dailyChanceOfRain)% · UV \(formatTemp(d.uv))",
+                    ].joined(separator: " · "),
+                    hourly: hourly
+                )
+            }
+            state.accept(.success(models: models))
         } catch {
             print(error)
             state.accept(.error(error: "что-то пошло не так!"))
         }
     }
-    
 
+    func formatTemp(_ value: Double) -> String {
+        String(format: "%.1f", value)
+    }
+
+    /// `"2026-03-30 15:00"` → `"15:00"`
+    func shortHourLabel(from apiTime: String) -> String {
+        if let space = apiTime.lastIndex(of: " ") {
+            return String(apiTime[apiTime.index(after: space)...])
+        }
+        return apiTime
+    }
+
+    /// Начало текущего календарного часа (локальное время устройства), для сравнения с `time_epoch` в ответе API.
+    static func startOfCurrentHourSince1970() -> Int {
+        let now = Date()
+        let cal = Calendar.current
+        let start = cal.dateInterval(of: .hour, for: now)?.start ?? now
+        return Int(start.timeIntervalSince1970)
+    }
 }
