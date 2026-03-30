@@ -41,6 +41,7 @@ final class AlamofireNetworkProvider: NetworkProvider {
     }
     func send<R: APIRequest>(_ request: R) async throws -> R.Response {
         let url = baseURL + request.path
+        print("url>> \(url)")
         let result = await session.request(
             url,
             method: request.method,
